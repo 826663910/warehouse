@@ -1,0 +1,90 @@
+:root {
+  --app-sidebar-width: 220px;
+  --app-header-height: 60px;
+  --el-color-primary: #2f6bff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  color: #1f2d3d;
+  background: #f4f6fb;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 通用滚动条美化 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c3cbe0;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a6b1cf;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 页面通用容器 */
+.page-container {
+  padding: 16px;
+}
+
+.page-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.toolbar .spacer {
+  flex: 1;
+}
+
+.table-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+/* 辅助样式 */
+.text-muted {
+  color: #8a94a6;
+}
+.text-danger {
+  color: #f56c6c;
+}
+.text-success {
+  color: #2f9e44;
+}
+.text-warning {
+  color: #e6a23c;
+}
+.mt-12 {
+  margin-top: 12px;
+}
+.mr-8 {
+  margin-right: 8px;
+}
