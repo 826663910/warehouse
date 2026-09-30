@@ -28,6 +28,18 @@
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </div>
 
+      <!-- 跨页面来源的筛选：来自供应商 / 分类页跳转等，需要明显且可一键清除 -->
+      <div v-if="activeSupplierFilter || activeCategoryFilter" class="filter-chips">
+        <el-tag v-if="activeSupplierFilter" type="info" effect="plain" closable @close="clearSupplierFilter">
+          <el-icon class="chip-icon"><OfficeBuilding /></el-icon>
+          仅看「{{ supplierName(query.supplier_id) }}」的物料
+        </el-tag>
+        <el-tag v-if="activeCategoryFilter" type="info" effect="plain" closable @close="clearCategoryFilter">
+          <el-icon class="chip-icon"><FolderOpened /></el-icon>
+          仅看「{{ categoryName(query.category_id) }}」分类的物料
+        </el-tag>
+      </div>
+
       <!-- 库存列表 -->
       <el-table
         ref="tableRef"
@@ -174,7 +186,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus, Refresh, RefreshLeft, Search, Edit, Tickets } from '@element-plus/icons-vue'
+import { Plus, Refresh, RefreshLeft, Search, Edit, Tickets, OfficeBuilding, FolderOpened } from '@element-plus/icons-vue'
 import {
   listInventory,
   getInventory,
@@ -203,7 +215,17 @@ const tableRef = ref(null)
 // 筛选、排序、分页都从 URL 还原：刷新、后退、分享链接都能回到同一个列表视图
 const query = reactive({
   name: typeof route.query.name === 'string' ? route.query.name : '',
-  type: typeof route.query.type === 'string' ? route.query.type : ''
+  type: typeof route.query.type === 'string' ? route.query.type : '',
+  // supplier_id 为供应商页跳转过来用的跨页筛选条件；非法 / 缺失都视作无筛选
+  supplier_id: (() => {
+    const n = Number(route.query.supplier_id)
+    return Number.isInteger(n) && n > 0 ? n : null
+  })(),
+  // category_id 为分类页跳转过来用的跨页筛选条件；非法 / 缺失都视作无筛选
+  category_id: (() => {
+    const n = Number(route.query.category_id)
+    return Number.isInteger(n) && n > 0 ? n : null
+  })()
 })
 const page = ref(Math.max(1, Number(route.query.page) || 1))
 const pageSize = ref(
@@ -251,6 +273,32 @@ function isLowStock(row) {
   return row.warning != null && row.stock != null && row.stock <= row.warning && row.warning > 0
 }
 
+// 当前是否在按供应商筛选；用 computed 让 chip / 标题 / 列表 自动响应
+const activeSupplierFilter = computed(() => query.supplier_id != null)
+// 当前是否在按分类筛选
+const activeCategoryFilter = computed(() => query.category_id != null)
+
+function supplierName(id) {
+  return supplierList.value.find((s) => s.id === id)?.name || `#${id}`
+}
+
+function categoryName(id) {
+  return categoryList.value.find((c) => c.id === id)?.name || `#${id}`
+}
+
+// 点 chip 的 ×：清掉跨页来源筛选，回到普通列表
+function clearSupplierFilter() {
+  query.supplier_id = null
+  page.value = 1
+  load()
+}
+
+function clearCategoryFilter() {
+  query.category_id = null
+  page.value = 1
+  load()
+}
+
 // 表头排序箭头跟随 URL 里的排序状态，刷新后视觉和实际一致
 const defaultSort = computed(() => {
   if (!sortState.prop || !sortState.order) return {}
@@ -264,6 +312,8 @@ function syncQuery() {
   const type = query.type.trim()
   if (keyword) q.name = keyword
   if (type) q.type = type
+  if (query.supplier_id != null) q.supplier_id = String(query.supplier_id)
+  if (query.category_id != null) q.category_id = String(query.category_id)
   if (sortState.prop) {
     q.sort_by = sortState.prop
     if (sortState.order) q.order = sortState.order
@@ -271,7 +321,7 @@ function syncQuery() {
   if (page.value > 1) q.page = String(page.value)
   if (pageSize.value !== DEFAULT_PAGE_SIZE) q.pageSize = String(pageSize.value)
 
-  const keys = ['name', 'type', 'sort_by', 'order', 'page', 'pageSize']
+  const keys = ['name', 'type', 'supplier_id', 'category_id', 'sort_by', 'order', 'page', 'pageSize']
   const unchanged = keys.every((k) => String(route.query[k] ?? '') === String(q[k] ?? ''))
   if (!unchanged) router.replace({ path: '/inventory', query: q })
 }
@@ -284,6 +334,8 @@ async function load() {
     const res = await listInventory({
       name: query.name.trim() || undefined,
       type: query.type.trim() || undefined,
+      supplier_id: query.supplier_id ?? undefined,
+      category_id: query.category_id ?? undefined,
       sort_by: sortState.prop || undefined,
       order: sortState.order || undefined,
       limit: pageSize.value,
@@ -310,6 +362,8 @@ function handleSearch() {
 function handleReset() {
   query.name = ''
   query.type = ''
+  query.supplier_id = null
+  query.category_id = null
   page.value = 1
   sortState.prop = ''
   sortState.order = ''
@@ -440,5 +494,17 @@ onMounted(async () => {
   color: #a0a8b8;
   line-height: 1.4;
   margin-top: 2px;
+}
+
+/* 跨页面来源的筛选 chip：来自供应商页跳转等，让用户看清楚「现在只看哪家的物料」 */
+.filter-chips {
+  margin-bottom: 12px;
+}
+.filter-chips :deep(.el-tag) {
+  font-size: 13px;
+}
+.chip-icon {
+  margin-right: 4px;
+  vertical-align: -2px;
 }
 </style>

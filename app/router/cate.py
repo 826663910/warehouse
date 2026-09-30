@@ -20,17 +20,6 @@ async def get_category(db: Annotated[AsyncSession, Depends(get_db)],
     cats = result.scalars().all()
     return cats
 
-# 物品列表(右边)
-@router.get('/inventory')
-async def get_cat_inventory(category_id: int,db: Annotated[AsyncSession, Depends(get_db)],
-                             user: Annotated[int, '用户', Depends(oauth2.require_user)]):
-    stmt = (select(model.Inventory).where(model.Inventory.category_id==category_id, model.Inventory.status==1)
-            .order_by(model.Inventory.id))
-    result = await db.execute(stmt)
-    cats = result.scalars().all()
-    return cats
-
-
 @router.post('/')
 async def create_category(category: schemas.CategoryCreate, db: Annotated[AsyncSession, Depends(get_db)],
                           user: Annotated[int, '用户', Depends(oauth2.require_user)]):

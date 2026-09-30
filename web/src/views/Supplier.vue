@@ -8,7 +8,7 @@
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="list" stripe>
+      <el-table v-loading="loading" :data="list" stripe @row-click="goToInventory">
         <el-table-column type="index" label="#" width="55" align="center" />
         <el-table-column prop="name" label="供应商名称" min-width="160">
           <template #default="{ row }">
@@ -27,7 +27,7 @@
         </el-table-column>
         <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
+            <el-button type="primary" link :icon="Edit" @click.stop="openEdit(row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -61,10 +61,19 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Refresh, Edit, OfficeBuilding } from '@element-plus/icons-vue'
 import { listSupplier, createSupplier, updateSupplier } from '@/api'
 import { fmtDateTime } from '@/utils/format'
+
+const router = useRouter()
+
+// 整行点击 = 跳到库存页并按该供应商过滤；编辑按钮已 .stop，不会冒泡到这里
+function goToInventory(row) {
+  if (window.getSelection()?.toString()) return   // 防止选文字时误触
+  router.push({ path: '/inventory', query: { supplier_id: row.id } })
+}
 
 const loading = ref(false)
 const saving = ref(false)
@@ -150,5 +159,9 @@ onMounted(load)
   color: var(--el-color-primary);
   vertical-align: -2px;
   margin-right: 4px;
+}
+/* 整行可点：给出鼠标反馈（按钮本身是 pointer，不受影响） */
+:deep(.el-table__row) {
+  cursor: pointer;
 }
 </style>

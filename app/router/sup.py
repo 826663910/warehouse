@@ -22,18 +22,6 @@ async def get_supplier(db: Annotated[AsyncSession, '数据库会话', Depends(ge
     return sups
 
 
-# 物品列表(右边)
-@router.get('/Inventory', response_model=List[schemas.SupplierOut])
-async def get_supplier(supplier_id: int, db: Annotated[AsyncSession, Depends(get_db)],
-                       user: Annotated[int, '用户', Depends(oauth2.require_user)]):
-    # 查询库存, 过滤出供应商id为supplier_id的, 再按id升序
-    stmt = (select(model.Inventory).where(model.Inventory.supplier_id == supplier_id, model.Inventory.status==1)
-            .order_by(model.Inventory.id))
-    result = await db.execute(stmt)   # 执行sql
-    items = result.scalars().all()  # 返回列表
-    return items
-
-
 # 创建供应商
 @router.post('/')
 async def create_supplier(supplier: schemas.SupplierCreate, db: Annotated[AsyncSession, Depends(get_db)],

@@ -35,7 +35,9 @@ async def get_inventory(db: Annotated[AsyncSession, '数据库会话', Depends(g
                         user: Annotated[int, '用户', Depends(oauth2.require_user)],
                         name: Optional[str] = None, type: Optional[str] = None, 
                         limit: int = 10, offset: int = 0,
-                        sort_by: Optional[str] = None, order: Optional[str] = 'asc'):
+                        sort_by: Optional[str] = None, order: Optional[str] = 'asc',
+                        supplier_id: Optional[int] = None,
+                        category_id: Optional[int] = None):
 
     # 过滤条件列表
     conditions = [model.Inventory.status == 1]
@@ -49,6 +51,12 @@ async def get_inventory(db: Annotated[AsyncSession, '数据库会话', Depends(g
         ))
     if type:
         conditions.append(model.Inventory.type.contains(type))
+    # 供应商维度：供应商页跳转过来时用，None / 0 都视作不过滤
+    if supplier_id:
+        conditions.append(model.Inventory.supplier_id == supplier_id)
+    # 分类维度：分类页跳转过来时用；只筛出挂在这个分类下的物料（非末级分类本身没物料，给出 0 让其退化为不过滤）
+    if category_id:
+        conditions.append(model.Inventory.category_id == category_id)
 
     # 3. 查询总数（分页/排序参数不能进 count，否则 total 会变成每页条数）
     count_stmt = select(func.count(model.Inventory.id)).where(*conditions)

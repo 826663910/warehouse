@@ -19,9 +19,10 @@
         :props="{ label: 'name', children: 'children' }"
         default-expand-all
         :expand-on-click-node="false"
+        @node-click="handleNodeClick"
       >
         <template #default="{ data }">
-          <div class="tree-node">
+          <div class="tree-node" :class="{ 'is-leaf': isLeaf(data) }">
             <el-icon class="folder-icon">
               <FolderOpened v-if="!isLeaf(data)" />
               <Folder v-else />
@@ -68,9 +69,22 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Refresh, Edit, FolderOpened, Folder, InfoFilled } from '@element-plus/icons-vue'
 import { listCategory, createCategory, updateCategory } from '@/api'
+
+const router = useRouter()
+
+// 节点点击：只有末级分类（可挂物料的）才能跳库存页；非末级只提示不跳
+function handleNodeClick(data) {
+  if (!isLeaf(data)) {
+    ElMessage.info(`「${data.name}」含子分类，请选择末级查看物料`)
+    return
+  }
+  if (window.getSelection()?.toString()) return
+  router.push({ path: '/inventory', query: { category_id: data.id } })
+}
 
 const loading = ref(false)
 const saving = ref(false)
@@ -214,6 +228,10 @@ onMounted(load)
   gap: 8px;
   padding-right: 12px;
   height: 40px;
+}
+/* 末级（可挂物料的）节点点击可跳转，给出手型提示 */
+.tree-node.is-leaf {
+  cursor: pointer;
 }
 .folder-icon {
   color: #e6a23c;
