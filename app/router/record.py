@@ -60,7 +60,7 @@ async def get_record(db: Annotated[AsyncSession, Depends(get_db)],
     total = await db.scalar(count_stmt)
 
     # 3. 查数据: 降序 + 翻页
-    stmt = (select(model.StockTransaction.transaction_date, model.Inventory.name, model.Inventory.type, model.Inventory.unit,
+    stmt = (select(model.StockTransaction.transaction_date, model.Inventory.code, model.Inventory.name, model.Inventory.type, model.Inventory.unit,
                    model.StockTransaction.order_type,model.StockTransaction.before_quantity, 
                    model.StockTransaction.change_quantity, model.StockTransaction.after_quantity)
             .join(model.Inventory, model.Inventory.id == model.StockTransaction.inventory_id, isouter=True)

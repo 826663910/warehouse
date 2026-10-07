@@ -21,6 +21,16 @@
           @keyup.enter="handleSearch"
           @clear="handleSearch"
         />
+        <el-select
+          v-model="query.status"
+          placeholder="状态"
+          style="width: 110px"
+          @change="handleSearch"
+        >
+          <el-option label="启用" :value="1" />
+          <el-option label="禁用" :value="0" />
+          <el-option label="全部" :value="-1" />
+        </el-select>
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
         <div class="spacer"></div>
@@ -55,13 +65,15 @@
             <div class="inv-name">{{ row.name }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="助记码" width="110" align="center">
+        <el-table-column label="助记码 · 分类 · 供应商" min-width="180" align="left">
           <template #default="{ row }">
-            <span v-if="row.mnemonic_code" class="mnemonic-tag">{{ row.mnemonic_code }}</span>
-            <span v-else class="text-muted">—</span>
+            <span v-if="row.mnemonic_code" class="mnemonic-tag">[{{ row.mnemonic_code }}]</span>
+            <template v-if="row.category_path"> · {{ row.category_path }}</template>
+            <template v-if="row.supplier_name"> · 供: {{ row.supplier_name }}</template>
+            <span v-if="!row.mnemonic_code && !row.category_path && !row.supplier_name" class="text-muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="type" label="型号" min-width="130">
+        <el-table-column prop="type" label="型号" min-width="150">
           <template #default="{ row }">{{ row.type || '—' }}</template>
         </el-table-column>
         <el-table-column prop="stock" label="当前库存" width="110" align="center" sortable="custom">
@@ -73,6 +85,13 @@
         <el-table-column label="预警值" width="90" align="center">
           <template #default="{ row }">{{ row.warning ?? '—' }}</template>
         </el-table-column>
+        <el-table-column label="物料状态" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 0 ? 'info' : 'success'" effect="light" size="small">
+              {{ row.status === 0 ? '禁用' : '启用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="库存状态" width="110" align="center">
           <template #default="{ row }">
             <el-tag :type="isLowStock(row) ? 'danger' : 'success'" effect="light" size="small">
@@ -80,7 +99,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" align="center" fixed="right">
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
             <el-button type="success" link :icon="Tickets" @click="quickOrder(row, 1)">入库</el-button>
@@ -172,6 +191,18 @@
               <div class="form-hint">库存 ≤ 预警值 时高亮提醒</div>
             </el-form-item>
           </el-col>
+          <el-col v-if="dialog.mode === 'edit'" :span="12">
+            <el-form-item label="物料状态">
+              <el-switch
+                v-model="form.status"
+                :active-value="1"
+                :inactive-value="0"
+                active-text="启用"
+                inactive-text="禁用"
+              />
+              <div class="form-hint">禁用后不出现在单据的物料搜索中</div>
+            </el-form-item>
+          </el-col>
         </el-row>
       </el-form>
       <template #footer>
@@ -225,6 +256,11 @@ const query = reactive({
   category_id: (() => {
     const n = Number(route.query.category_id)
     return Number.isInteger(n) && n > 0 ? n : null
+  })(),
+  // 状态筛选：1 启用（默认）/ 0 禁用 / -1 全部；URL 里的非法值回退到启用
+  status: (() => {
+    const n = Number(route.query.status)
+    return [0, 1, -1].includes(n) ? n : 1
   })()
 })
 const page = ref(Math.max(1, Number(route.query.page) || 1))
@@ -247,7 +283,8 @@ const form = reactive({
   supplier_id: null,
   unit: '个',
   stock: 0,
-  warning: null
+  warning: null,
+  status: 1
 })
 
 const rules = {
@@ -314,6 +351,7 @@ function syncQuery() {
   if (type) q.type = type
   if (query.supplier_id != null) q.supplier_id = String(query.supplier_id)
   if (query.category_id != null) q.category_id = String(query.category_id)
+  if (query.status !== 1) q.status = String(query.status)
   if (sortState.prop) {
     q.sort_by = sortState.prop
     if (sortState.order) q.order = sortState.order
@@ -321,7 +359,7 @@ function syncQuery() {
   if (page.value > 1) q.page = String(page.value)
   if (pageSize.value !== DEFAULT_PAGE_SIZE) q.pageSize = String(pageSize.value)
 
-  const keys = ['name', 'type', 'supplier_id', 'category_id', 'sort_by', 'order', 'page', 'pageSize']
+  const keys = ['name', 'type', 'supplier_id', 'category_id', 'status', 'sort_by', 'order', 'page', 'pageSize']
   const unchanged = keys.every((k) => String(route.query[k] ?? '') === String(q[k] ?? ''))
   if (!unchanged) router.replace({ path: '/inventory', query: q })
 }
@@ -336,6 +374,7 @@ async function load() {
       type: query.type.trim() || undefined,
       supplier_id: query.supplier_id ?? undefined,
       category_id: query.category_id ?? undefined,
+      status: query.status,
       sort_by: sortState.prop || undefined,
       order: sortState.order || undefined,
       limit: pageSize.value,
@@ -364,6 +403,7 @@ function handleReset() {
   query.type = ''
   query.supplier_id = null
   query.category_id = null
+  query.status = 1
   page.value = 1
   sortState.prop = ''
   sortState.order = ''
@@ -391,6 +431,7 @@ function resetForm() {
   form.unit = '个'
   form.stock = 0
   form.warning = null
+  form.status = 1
 }
 
 function openCreate() {
@@ -412,6 +453,7 @@ async function openEdit(row) {
   form.unit = detail.unit || '个'
   form.stock = detail.stock ?? 0
   form.warning = detail.warning ?? null
+  form.status = detail.status ?? 1
   dialog.visible = true
 }
 
@@ -441,7 +483,8 @@ async function submit() {
       await createInventory(payload)
       ElMessage.success('新增成功')
     } else {
-      await updateInventory(form.id, payload)
+      // 编辑模式额外带 status；创建不用传，后端 schema 里 server_default=1 兜底
+      await updateInventory(form.id, { ...payload, status: form.status })
       ElMessage.success('保存成功')
     }
     dialog.visible = false

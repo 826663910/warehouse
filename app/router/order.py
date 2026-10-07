@@ -101,8 +101,8 @@ async def search_inventory(db: Annotated[AsyncSession, Depends(get_db)],
     # 搜索库存
     stmt = select(model.Inventory).where(*conditions).limit(limit)
     result = await db.execute(stmt)
-    inventories = result.scalars().all()
-    return inventories
+    inventory = list(result.scalars().all())
+    return inventory
 
 
 # 生成单据号

@@ -36,7 +36,11 @@
         <el-table-column label="发生时间" width="170">
           <template #default="{ row }">{{ fmtDateTimeFull(row.transaction_date) }}</template>
         </el-table-column>
-        <el-table-column prop="name" label="物料名称" min-width="150" />
+        <el-table-column label="物料名称" min-width="180">
+          <template #default="{ row }">
+            <span v-if="row.code" class="row-code">{{ row.code }}</span>{{ row.name || '—' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="type" label="型号" min-width="120">
           <template #default="{ row }">{{ row.type || '—' }}</template>
         </el-table-column>
@@ -191,5 +195,12 @@ onMounted(load)
   font-size: 12px;
   color: #9aa3b2;
   margin-left: 2px;
+}
+/* 物料编码前缀：等宽小灰字，与库存列表的展示风格统一 */
+.row-code {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  color: #9aa3b2;
+  margin-right: 4px;
 }
 </style>

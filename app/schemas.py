@@ -63,6 +63,11 @@ class InventoryOut(BaseModel):
     unit: str
     warning: Optional[int] = None
     mnemonic_code: Optional[str] = None   # 助记码，前端列表展示与搜索需要
+    # 列表展示用：分类路径 = 「一级分类/末级分类」（仅一级时只显示末级），供应商名称
+    category_path: Optional[str] = None
+    supplier_name: Optional[str] = None
+    # 物料状态：1 启用 / 0 禁用（前端列表展示 + 筛选）
+    status: Optional[int] = None
 
 
 # 库存分页响应
@@ -70,7 +75,7 @@ class InventoryPage(BaseModel):
     total: int
     items: List[InventoryOut]
 
-
+# 库存创建
 class InventoryCreate(BaseModel):
     mnemonic_code: Optional[str] = None
     supplier_id: int
@@ -82,6 +87,7 @@ class InventoryCreate(BaseModel):
     warning: Optional[int] = None
     status: Optional[int] = None
 
+# 库存信息更新
 class InventoryUpdate(BaseModel):
     mnemonic_code: Optional[str] = None
     supplier_id: Optional[int] = None
@@ -102,6 +108,9 @@ class OrderSearchInventory(BaseModel):
     type: Optional[str] = None
     unit: Optional[str] = ''
     stock: Optional[int] = 0
+    # 展示用：分类路径 + 当前供应商名（与 InventoryOut 一致）
+    category_path: Optional[str] = None
+    supplier_name: Optional[str] = None
     model_config = {"from_attributes": True}
 
 
@@ -109,6 +118,7 @@ class OrderSearchInventory(BaseModel):
 # 注意: 查询用了 isouter join, 物料缺失时 name/type/unit 可能为 None, 必须 Optional
 class RecordOut(BaseModel):
     transaction_date: datetime
+    code: Optional[str] = None
     name: Optional[str] = None
     type: Optional[str] = None
     unit: Optional[str] = None
@@ -153,6 +163,9 @@ class OrderItemOut(BaseModel):
     unit_price: Optional[float] = None
     total_amount: Optional[float] = None
     line_remark: Optional[str] = None
+    # 展示用：通过 inventory_id 现算的「一级/末级」分类路径 + 当前供应商名
+    category_path: Optional[str] = None
+    supplier_name: Optional[str] = None
 
 # 单据
 class OrderOut(BaseModel):

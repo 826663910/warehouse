@@ -36,11 +36,20 @@ async def get_inventory(db: Annotated[AsyncSession, '数据库会话', Depends(g
                         name: Optional[str] = None, type: Optional[str] = None, 
                         limit: int = 10, offset: int = 0,
                         sort_by: Optional[str] = None, order: Optional[str] = 'asc',
+                        status: Optional[int] = None,
                         supplier_id: Optional[int] = None,
                         category_id: Optional[int] = None):
 
     # 过滤条件列表
-    conditions = [model.Inventory.status == 1]
+    # status 筛选：None 默认只看启用（与旧版行为一致）；-1 全部；0 只看禁用；1 只看启用
+    # 注意不能写成 `Inventory.status == status`——status=None 时会生成 `WHERE status = NULL`，一行都查不到
+    if status is None:
+        conditions = [model.Inventory.status == 1]
+    elif status == -1:
+        conditions = []
+    else:
+        # 非法值（不是 0/1）按启用兜底，避免意外查全
+        conditions = [model.Inventory.status == (status if status in (0, 1) else 1)]
 
     # 2. 过滤条件
     if name:          # 名称 / 助记码 / 物料编码，任意命中即可
@@ -73,6 +82,45 @@ async def get_inventory(db: Annotated[AsyncSession, '数据库会话', Depends(g
             .limit(limit).offset(offset))
     result = await db.execute(stmt)     # 执行sql
     inventory = result.scalars().all()  # 返回所有
+
+    # 6. 拼装展示用字段：分类路径（"一级/末级"）和供应商名。
+    # 不用 N+1：只 in_ 查一次相关分类和供应商，本地在内存里 join。
+    # root_category_id 也是 ProductCategory.id，所以一次 in_ 查询同时覆盖了"末级"和"一级"。
+    """使用set推导式, 以合集的方式, 拿到inv的外键category_id和root_category_id"""
+    category_ids = {inv.category_id for inv in inventory if inv.category_id} | {
+        inv.root_category_id for inv in inventory if inv.root_category_id
+    }
+    """使用set推导式, 拿到inv的外键supplier_id"""
+    supplier_ids = {inv.supplier_id for inv in inventory if inv.supplier_id}
+    category_map = {}   # 分类映射表（id -> 分类）
+    # 当category_ids不为空时，用in的方式查询所有分类
+    if category_ids:
+        rows = await db.scalars(
+            select(model.ProductCategory).where(model.ProductCategory.id.in_(category_ids))
+        )
+        # 使用字典推导式, 建立分类id与分类实例的映射
+        category_map = {c.id: c for c in rows}
+    supplier_map = {}
+    # 当supplier_ids不为空时，用in的方式查询所有供应商
+    if supplier_ids:
+        rows = await db.scalars(
+            select(model.Supplier).where(model.Supplier.id.in_(supplier_ids))
+        )
+        # 使用字典推导式, 建立供应商id与供应商实例的映射
+        supplier_map = {s.id: s for s in rows}
+
+    # 循环遍历所有库存，根据分类映射表和供应商映射表，拼装分类路径和供应商名
+    for inv in inventory:
+        leaf = category_map.get(inv.category_id)    # 查映射
+        root = category_map.get(inv.root_category_id)
+        if leaf and root and root.id != leaf.id:
+            inv.category_path = f"{root.name}/{leaf.name}"
+        elif leaf:
+            # 一级分类就是末级（没有二级/三级），不重复显示
+            inv.category_path = leaf.name
+        sup = supplier_map.get(inv.supplier_id)  # 查映射
+        inv.supplier_name = sup.name if sup else None
+
     return {"total": total, "items": inventory}
 
 @router.get('/{id}')
@@ -147,6 +195,10 @@ async def update_inventory(id: int, inventory_update: schemas.InventoryUpdate, d
 
     # 2. 取出前端传入的字段
     update_data = inventory_update.model_dump(exclude_unset=True)
+
+    # 2.1 如果更新了状态，校验只能是 0（禁用）/ 1（启用）
+    if 'status' in update_data and update_data['status'] not in (0, 1):
+        raise HTTPException(status_code=400, detail="status 只能为 0（禁用）或 1（启用）")
 
     # 3. ⭐ 核心逻辑：如果更新了分类
     if 'category_id' in update_data:
