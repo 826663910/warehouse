@@ -67,16 +67,24 @@ async def get_current_user(token: str = Depends(oath_scheme),
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='该用户不存在！')
     return user
 
+# 权限依赖：只看 level（数字越大权限越大，高级自动覆盖低级）
+# role 字段只用于展示，不参与权限判断
 
-# 获取当前用户的角色(管理员)
-def require_role(current_user: model.User = Depends(get_current_user)):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="必须是管理员才可以操作!")
+# 任何已登录用户（level >= 1）：普通用户 / 管理员 / 超级管理员 都能进
+def require_user(current_user: model.User = Depends(get_current_user)):
+    if current_user.level < 1:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="登录后才能操作!")
     return current_user
 
-# 获取当前用户的角色(管用户)
-def require_user(current_user: model.User = Depends(get_current_user)):
-    if current_user.role != "user":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="登录后, 才能操作!")
+# 管理员及以上（level >= 2）：管理员 / 超级管理员 能进，普通用户不能
+def require_role(current_user: model.User = Depends(get_current_user)):
+    if current_user.level < 2:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="必须是管理员才能操作!")
+    return current_user
+
+# 仅超级管理员（level == 3）
+def require_super_admin(current_user: model.User = Depends(get_current_user)):
+    if current_user.level < 3:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="必须是超级管理员才能操作!")
     return current_user
 

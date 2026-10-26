@@ -25,9 +25,10 @@
         <el-table-column label="创建时间" width="170">
           <template #default="{ row }">{{ fmtDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="100" align="center" fixed="right">
+        <el-table-column label="操作" width="140" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :icon="Edit" @click.stop="openEdit(row)">编辑</el-button>
+            <el-button type="danger" link :icon="Delete" @click.stop="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -62,9 +63,9 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Plus, Refresh, Edit, OfficeBuilding } from '@element-plus/icons-vue'
-import { listSupplier, createSupplier, updateSupplier } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Refresh, Edit, Delete, OfficeBuilding } from '@element-plus/icons-vue'
+import { listSupplier, createSupplier, updateSupplier, deleteSupplier } from '@/api'
 import { fmtDateTime } from '@/utils/format'
 
 const router = useRouter()
@@ -116,6 +117,26 @@ function openEdit(row) {
   form.contact = row.contact || ''
   form.phone = row.phone || ''
   dialog.visible = true
+}
+
+// 删除供应商：二次确认；被物料引用时后端会 400（拦截器已提示）
+async function handleDelete(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除供应商「${row.name}」吗？`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删 除', cancelButtonText: '取 消' }
+    )
+  } catch (e) {
+    return   // 用户点了取消
+  }
+  try {
+    await deleteSupplier(row.id)
+    ElMessage.success('删除成功')
+    load()
+  } catch (e) {
+    /* 拦截器已提示（含"被物料引用"的 400 信息） */
+  }
 }
 
 async function submit() {

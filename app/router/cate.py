@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, HTTPException, Depends
+from fastapi import APIRouter, status, HTTPException, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession  # 异步会话注解
 from sqlalchemy import select   # 查询
 from ..database import get_db  # 会话工厂
@@ -51,7 +51,7 @@ async def create_category(category: schemas.CategoryCreate, db: Annotated[AsyncS
 
 @router.patch('/{id}')
 async def update_category(id: int, category: schemas.CategoryUpdate, db: Annotated[AsyncSession, Depends(get_db)],
-                          user: Annotated[int, '用户', Depends(oauth2.require_user)]):
+                          user: Annotated[int, '用户', Depends(oauth2.require_role)]):
 
     # 查询要更新的类别
     stmt = select(model.ProductCategory).where(model.ProductCategory.id == id)
@@ -93,3 +93,37 @@ async def update_category(id: int, category: schemas.CategoryUpdate, db: Annotat
     await db.commit()
     await db.refresh(cat)
     return cat
+
+@router.delete('/{id}')
+async def delete_category(id: int, db: Annotated[AsyncSession, Depends(get_db)],
+                     user: Annotated[int, '用户', Depends(oauth2.require_role)]):
+    # 查询要删除的类别
+    stmt = select(model.ProductCategory).where(model.ProductCategory.id == id)
+    result = await db.execute(stmt)
+    cat = result.scalar_one_or_none()   # 返回第一条实例
+    if not cat:
+        raise HTTPException(status_code=404, detail="没有这个类别!")
+
+    # 校验1：还有启用的子分类时不许删（否则子分类的 parent_id 指向已禁用节点, 树会挂错/消失）
+    has_child = await db.scalar(
+        select(model.ProductCategory.id)
+        .where(model.ProductCategory.parent_id == id, model.ProductCategory.status == 1)
+        .limit(1)
+    )
+    if has_child:
+        raise HTTPException(status_code=400, detail="该分类下还有子分类, 请先删除子分类!")
+
+    # 校验2：还有物料挂在这个分类上时不许删（含 root_category_id, 一级分类被物料冗余引用）
+    used = await db.scalar(
+        select(model.Inventory.id)
+        .where((model.Inventory.category_id == id) |
+               (model.Inventory.root_category_id == id),
+               model.Inventory.status == 1)
+        .limit(1)
+    )
+    if used:
+        raise HTTPException(status_code=400, detail="该分类下还有启用状态的物料, 请先处理物料后再删除!")
+
+    cat.status = 0          # 逻辑删除
+    await db.commit()       # 提交
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

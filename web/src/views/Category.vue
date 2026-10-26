@@ -34,6 +34,7 @@
             <span class="node-actions">
               <el-button v-if="data.level < 3" link type="primary" size="small" :icon="Plus" @click.stop="openCreate(1, data)">加子类</el-button>
               <el-button link type="warning" size="small" :icon="Edit" @click.stop="openEdit(data)">编辑</el-button>
+              <el-button link type="danger" size="small" :icon="Delete" @click.stop="handleDelete(data)">删除</el-button>
             </span>
           </div>
         </template>
@@ -70,9 +71,9 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Plus, Refresh, Edit, FolderOpened, Folder, InfoFilled } from '@element-plus/icons-vue'
-import { listCategory, createCategory, updateCategory } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Refresh, Edit, Delete, FolderOpened, Folder, InfoFilled } from '@element-plus/icons-vue'
+import { listCategory, createCategory, updateCategory, deleteCategory } from '@/api'
 
 const router = useRouter()
 
@@ -170,6 +171,26 @@ function openEdit(node) {
   form.name = node.name
   form.sort_order = node.sort_order || 0
   dialog.visible = true
+}
+
+// 删除分类：二次确认；含子分类 / 有物料挂载时后端会 400（拦截器已提示）
+async function handleDelete(data) {
+  const tip = isLeaf(data)
+    ? `确定删除分类「${data.name}」吗？`
+    : `「${data.name}」含 ${childCount(data)} 个子分类，须先删除子分类。仍要尝试删除吗？`
+  try {
+    await ElMessageBox.confirm(tip, '删除确认',
+      { type: 'warning', confirmButtonText: '删 除', cancelButtonText: '取 消' })
+  } catch (e) {
+    return   // 用户点了取消
+  }
+  try {
+    await deleteCategory(data.id)
+    ElMessage.success('删除成功')
+    load()
+  } catch (e) {
+    /* 拦截器已提示（含"有子分类/有物料"的 400 信息） */
+  }
 }
 
 async function submit() {

@@ -21,11 +21,12 @@ async def user_login(userr_credentials: OAuth2PasswordRequestForm=Depends(),
     user = result.scalar_one_or_none()  # 返回一个或者None
     # 如果为None, 抛出404异常
     if user is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='User not found')
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='用户不存在')
     # 验证密码
     if not utils.verify(userr_credentials.password, user.password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Incorrect password')
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='账号或密码错误')
     # 调用创建访问token的函数生成token
     token = oauth2.create_access_token(data={"user_id": user.id, "role": user.role})
-    # 返回token
-    return {"access_token": token, "token_type": "bearer"}
+    # 返回token（level/username 给前端：菜单按 level 显示"账号管理"入口）
+    return {"access_token": token, "token_type": "bearer",
+            "level": user.level, "username": user.username}

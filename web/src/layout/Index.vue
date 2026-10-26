@@ -87,15 +87,24 @@ const route = useRoute()
 const router = useRouter()
 const collapsed = ref(false)
 
-// 侧边菜单 = 除隐藏页外的子路由
-const menus = [
-  { path: '/dashboard', title: '首页概览', icon: 'Odometer' },
-  { path: '/inventory', title: '库存管理', icon: 'Box' },
-  { path: '/orders', title: '出入库单据', icon: 'Tickets' },
-  { path: '/record', title: '出入库流水', icon: 'DataLine' },
-  { path: '/supplier', title: '供应商管理', icon: 'OfficeBuilding' },
-  { path: '/category', title: '分类管理', icon: 'FolderOpened' }
-]
+// 侧边菜单 = 除隐藏页外的子路由；「账号管理」只有超管(level>=3)可见
+const menus = computed(() => {
+  const items = [
+    { path: '/dashboard', title: '首页概览', icon: 'Odometer' },
+    { path: '/inventory', title: '库存管理', icon: 'Box' },
+    { path: '/orders', title: '出入库单据', icon: 'Tickets' },
+    { path: '/record', title: '出入库流水', icon: 'DataLine' },
+    { path: '/report', title: '出入库报表', icon: 'Histogram' },
+    { path: '/profit', title: '毛利报表', icon: 'DataAnalysis' },
+    { path: '/supplier', title: '供应商管理', icon: 'OfficeBuilding' },
+    { path: '/customer', title: '客户管理', icon: 'User' },
+    { path: '/category', title: '分类管理', icon: 'FolderOpened' }
+  ]
+  if ((userStore.level || 0) >= 3) {
+    items.push({ path: '/users', title: '账号管理', icon: 'UserFilled' })
+  }
+  return items
+})
 
 const activeMenu = computed(() => route.meta.active || route.path)
 

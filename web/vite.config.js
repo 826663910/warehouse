@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from 'node:url'
 const BACKEND = 'http://127.0.0.1:8000'
 
 // 需要代理到后端的接口前缀
-const PROXY_PREFIX = ['/login', '/users', '/supplier', '/category', '/inventory', '/order', '/record', '/health']
+const PROXY_PREFIX = ['/login', '/users', '/supplier', '/customer', '/category', '/inventory', '/order', '/record', '/dashboard', '/health', '/units', '/profit']
 
 export default defineConfig({
   plugins: [vue()],

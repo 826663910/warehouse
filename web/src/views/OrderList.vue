@@ -64,8 +64,20 @@
         <el-table-column label="业务日期" width="165">
           <template #default="{ row }">{{ fmtDateTimeFull(row.transaction_date) }}</template>
         </el-table-column>
-        <el-table-column label="供应商" min-width="130">
-          <template #default="{ row }">{{ supplierName(row.supplier_id) }}</template>
+        <el-table-column label="合作方" min-width="170">
+          <template #default="{ row }">
+            <template v-if="row.order_type === 4">
+              <!-- 报废是仓库内部处理，没有合作方 -->
+              <span class="text-muted">—</span>
+            </template>
+            <template v-else>
+              <el-tag v-if="isSupplierType(row.order_type)" size="small" effect="light" type="primary" class="role-tag">供应商</el-tag>
+              <el-tag v-else size="small" effect="light" type="warning" class="role-tag">客户</el-tag>
+              <span class="partner-name">
+                {{ isSupplierType(row.order_type) ? supplierName(row.supplier_id) : customerName(row.customer_id) }}
+              </span>
+            </template>
+          </template>
         </el-table-column>
         <el-table-column label="制单人" width="100">
           <template #default="{ row }">{{ row.created_by }}</template>
@@ -84,7 +96,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="270" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :icon="View" @click.stop="openDetail(row)">详情</el-button>
             <el-button
@@ -101,6 +113,13 @@
               :icon="CircleCheck"
               @click.stop="handleReview(row)"
             >审核</el-button>
+            <el-button
+              v-if="row.status === 1"
+              type="danger"
+              link
+              :icon="Delete"
+              @click.stop="handleDelete(row)"
+            >删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -124,8 +143,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, RefreshLeft, Plus, ArrowDown, View, EditPen, CircleCheck } from '@element-plus/icons-vue'
-import { listOrders, reviewOrder, listSupplier } from '@/api'
+import { Search, Refresh, RefreshLeft, Plus, ArrowDown, View, EditPen, CircleCheck, Delete } from '@element-plus/icons-vue'
+import { listOrders, reviewOrder, deleteOrder, listSupplier, listCustomer } from '@/api'
 import { ORDER_TYPES, ORDER_STATUS, fmtDateTimeFull } from '@/utils/format'
 
 const PAGE_SIZES = [10, 20, 50]
@@ -137,6 +156,7 @@ const loading = ref(false)
 const list = ref([])
 const total = ref(0)
 const suppliers = ref([])
+const customers = ref([])
 
 // 筛选条件与分页都从 URL 还原：刷新、后退、分享链接都能回到同一个列表视图
 function readFilters() {
@@ -166,8 +186,23 @@ const supplierMap = computed(() => {
   return m
 })
 
+const customerMap = computed(() => {
+  const m = new Map()
+  customers.value.forEach((c) => m.set(c.id, c.name))
+  return m
+})
+
 function supplierName(id) {
   return id ? supplierMap.value.get(id) || `#${id}` : '—'
+}
+
+function customerName(id) {
+  return id ? customerMap.value.get(id) || `#${id}` : '—'
+}
+
+// 合作方判定：入库/退货 = 供应商，出库 = 客户（报废在前面的模板里特判）
+function isSupplierType(t) {
+  return t === 1 || t === 3
 }
 
 // 只把"真的选了值"的传给后端：0 是有效值，不能因为 falsy 被丢掉
@@ -256,8 +291,29 @@ async function handleReview(row) {
   load()
 }
 
+// 删除草稿单据：物理删除主表+明细；只有草稿状态可删（后端同样校验）
+async function handleDelete(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除草稿单据「${row.order_no}」吗？删除后不可恢复！`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删 除', cancelButtonText: '取 消' }
+    )
+  } catch (e) {
+    return
+  }
+  try {
+    await deleteOrder(row.id)
+    ElMessage.success('删除成功')
+    load()
+  } catch (e) {
+    /* 拦截器已提示（含"非草稿不可删"的 400 信息） */
+  }
+}
+
 onMounted(async () => {
   suppliers.value = await listSupplier()
+  customers.value = await listCustomer()
   load()
 })
 </script>
@@ -279,6 +335,17 @@ onMounted(async () => {
 }
 .drop-label {
   margin-left: 8px;
+}
+/* 合作方：角色 tag + 名称 */
+.role-tag {
+  vertical-align: middle;
+}
+.partner-name {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.text-muted {
+  color: #c0c4cc;
 }
 /* 整行可点，给出鼠标反馈（操作列按钮自己是 pointer，不受影响） */
 :deep(.el-table__row) {

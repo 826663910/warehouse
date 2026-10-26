@@ -56,18 +56,35 @@ export const getInventory = (id) => client.get(`/inventory/${id}`)
 export const createInventory = (data) => client.post('/inventory/', data)
 export const updateInventory = (id, data) => client.patch(`/inventory/${id}`, data)
 
+/* 单位：按赛道取可选单位，供物料表单的"单位"下拉使用 */
+export const getUnits = (category) => client.get('/units/', { params: { category } })
+
 /* 单据页选品搜索（返回含 id/code/name/type/unit/stock） */
 export const searchOrderInventory = (params) => client.get('/order/inventory/search', { params })
+
+/* ========== 用户（仅超管） ========== */
+export const listUsers = () => client.get('/users/')
+export const createUser = (data) => client.post('/users/', data)
+export const updateUser = (id, data) => client.patch(`/users/${id}`, data)
+export const deleteUser = (id) => client.delete(`/users/${id}`)
 
 /* ========== 供应商 ========== */
 export const listSupplier = () => client.get('/supplier/')
 export const createSupplier = (data) => client.post('/supplier/', data)
 export const updateSupplier = (id, data) => client.patch(`/supplier/${id}`, data)
+export const deleteSupplier = (id) => client.delete(`/supplier/${id}`)
+
+/* ========== 客户 ========== */
+export const listCustomer = () => client.get('/customer/')
+export const createCustomer = (data) => client.post('/customer/', data)
+export const updateCustomer = (id, data) => client.patch(`/customer/${id}`, data)
+export const deleteCustomer = (id) => client.delete(`/customer/${id}`)
 
 /* ========== 分类 ========== */
 export const listCategory = () => client.get('/category/')
 export const createCategory = (data) => client.post('/category/', data)
 export const updateCategory = (id, data) => client.patch(`/category/${id}`, data)
+export const deleteCategory = (id) => client.delete(`/category/${id}`)
 
 /* ========== 单据 ========== */
 export const listOrders = (params) => client.get('/order/', { params })
@@ -75,8 +92,15 @@ export const getOrder = (id) => client.get(`/order/${id}`)
 export const createOrder = (data) => client.post('/order/', data)
 export const updateOrder = (id, data) => client.patch(`/order/${id}`, data)
 export const reviewOrder = (id) => client.post(`/order/review/${id}`)
+export const deleteOrder = (id) => client.delete(`/order/${id}`)
 
 /* ========== 流水 ========== */
 export const listRecords = (params) => client.get('/record/', { params })
+/* 报表（按物料聚合） */
+export const getReport = (params) => client.get('/record/report', { params })
+/* 仪表盘聚合统计（一次请求返回首页全部数字） */
+export const getDashboardStats = () => client.get('/dashboard/stats')
+/* 毛利报表：按月趋势（出库单口径，成本用历史快照） */
+export const getProfitTrend = (params) => client.get('/profit/trend', { params })
 
 export default client

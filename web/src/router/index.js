@@ -26,6 +26,13 @@ const routes = [
         meta: { title: '库存管理', icon: 'Box' }
       },
       {
+        // 带 id = 编辑，不带 = 新增（与 orders/edit/:id? 同一套约定）
+        path: 'inventory/edit/:id?',
+        name: 'inventory-edit',
+        component: () => import('@/views/InventoryEdit.vue'),
+        meta: { title: '物料编辑', icon: 'Box', active: '/inventory' }
+      },
+      {
         path: 'orders',
         name: 'orders',
         component: () => import('@/views/OrderList.vue'),
@@ -50,16 +57,41 @@ const routes = [
         meta: { title: '出入库流水', icon: 'DataLine' }
       },
       {
+        path: 'report',
+        name: 'report',
+        component: () => import('@/views/Report.vue'),
+        meta: { title: '出入库报表', icon: 'Histogram' }
+      },
+      {
+        path: 'profit',
+        name: 'profit',
+        component: () => import('@/views/Profit.vue'),
+        meta: { title: '毛利报表', icon: 'DataAnalysis' }
+      },
+      {
         path: 'supplier',
         name: 'supplier',
         component: () => import('@/views/Supplier.vue'),
         meta: { title: '供应商管理', icon: 'OfficeBuilding' }
       },
       {
+        path: 'customer',
+        name: 'customer',
+        component: () => import('@/views/Customer.vue'),
+        meta: { title: '客户管理', icon: 'User' }
+      },
+      {
         path: 'category',
         name: 'category',
         component: () => import('@/views/Category.vue'),
         meta: { title: '分类管理', icon: 'FolderOpened' }
+      },
+      {
+        path: 'users',
+        name: 'users',
+        component: () => import('@/views/User.vue'),
+        // level: 3 = 只有超级管理员可见可进（菜单 + 路由守卫双重拦截）
+        meta: { title: '账号管理', icon: 'UserFilled', level: 3 }
       }
     ]
   },
@@ -71,13 +103,17 @@ const router = createRouter({
   routes
 })
 
-// 全局路由守卫：校验登录态
+// 全局路由守卫：校验登录态 + 页面级权限
 router.beforeEach((to) => {
   document.title = to.meta?.title ? `${to.meta.title} · 库存管理系统` : '库存管理系统'
   if (!userStore.token && to.name !== 'login') {
     return { name: 'login' }
   }
   if (userStore.token && to.name === 'login') {
+    return { name: 'dashboard' }
+  }
+  // 页面级权限：meta.level 声明最低级别，低于它直接踢回首页
+  if (to.meta?.level && (userStore.level || 0) < to.meta.level) {
     return { name: 'dashboard' }
   }
   return true

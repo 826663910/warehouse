@@ -33,7 +33,19 @@
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="业务日期">{{ fmtDateTimeFull(order.transaction_date) }}</el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ supplierName(order.supplier_id) }}</el-descriptions-item>
+        <el-descriptions-item label="合作方">
+          <template v-if="order.order_type === 4">
+            <!-- 报废是仓库内部处理，没有合作方 -->
+            <span class="text-muted">—</span>
+          </template>
+          <template v-else>
+            <el-tag v-if="isSupplierType(order.order_type)" size="small" effect="light" type="primary" class="role-tag">供应商</el-tag>
+            <el-tag v-else size="small" effect="light" type="warning" class="role-tag">客户</el-tag>
+            <span class="partner-name">
+              {{ isSupplierType(order.order_type) ? supplierName(order.supplier_id) : customerName(order.customer_id) }}
+            </span>
+          </template>
+        </el-descriptions-item>
         <el-descriptions-item label="制单人">{{ order.created_by }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ order.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
@@ -53,15 +65,24 @@
         <el-table-column prop="item_type" label="型号" min-width="110">
           <template #default="{ row }">{{ row.item_type || '—' }}</template>
         </el-table-column>
-        <el-table-column label="数量" width="110" align="center">
-          <template #default="{ row }">{{ row.quantity }} {{ row.item_unit }}</template>
+        <el-table-column label="数量" width="130" align="center">
+          <template #default="{ row }">
+            <!-- 展示用 quantity_display（后端已换算成【物料显示单位】）；
+                 quantity 是基础单位，不能直接给人看 -->
+            <div>{{ fmtQty(row.quantity_display ?? row.quantity) }} {{ row.item_unit }}</div>
+            <!-- 录入单位和物料单位不一致时，把当时填的也标出来 -->
+            <div v-if="row.input_unit && row.input_unit !== row.item_unit" class="cell-hint">
+              录入 {{ row.input_qty }} {{ row.input_unit }}
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column label="单价" width="110" align="right">
+        <!-- 报废单没有"成交价"：单价列隐藏（它存的是成本均价，不是价格），损失看金额列 -->
+        <el-table-column v-if="order?.order_type !== 4" :label="priceLabel" width="110" align="right">
           <template #default="{ row }">
             {{ priceOf(row) != null ? `¥ ${fmtMoney(priceOf(row))}` : '—' }}
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="120" align="right">
+        <el-table-column :label="amountLabel" width="120" align="right">
           <template #default="{ row }"><b>¥ {{ fmtMoney(amountOf(row)) }}</b></template>
         </el-table-column>
       </el-table>
@@ -70,7 +91,7 @@
         <div class="sums">
           <span>共 <b>{{ items.length }}</b> 项物料</span>
           <span>总数量：<b>{{ totalQty }}</b></span>
-          <span v-if="hasPrice">单据金额：<b class="sum-amount">¥ {{ fmtMoney(totalAmount) }}</b></span>
+          <span v-if="hasPrice">{{ amountLabel }}：<b class="sum-amount">¥ {{ fmtMoney(totalAmount) }}</b></span>
         </div>
       </div>
     </div>
@@ -82,7 +103,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Back, CircleCheck, EditPen } from '@element-plus/icons-vue'
-import { getOrder, listSupplier, reviewOrder } from '@/api'
+import { getOrder, listSupplier, listCustomer, reviewOrder } from '@/api'
 import { ORDER_TYPES, ORDER_STATUS, fmtDateTimeFull } from '@/utils/format'
 
 const route = useRoute()
@@ -92,10 +113,18 @@ const loading = ref(false)
 const reviewing = ref(false)
 const order = ref(null)
 const suppliers = ref([])
+const customers = ref([])
 
 const items = computed(() => order.value?.items || [])
 const hasPrice = computed(() => items.value.some((i) => priceOf(i) != null))
-const totalQty = computed(() => items.value.reduce((s, i) => s + (i.quantity || 0), 0))
+
+// 同一列在不同单据下的语义：入库=采购价、出库=售价、退货=退货价（报废无成交价，存的是成本均价）
+const PRICE_LABELS = { 1: '采购单价', 2: '销售单价', 3: '退货单价' }
+const AMOUNT_LABELS = { 1: '采购金额', 2: '销售金额', 3: '退货金额', 4: '报废损失' }
+const priceLabel = computed(() => PRICE_LABELS[order.value?.order_type] || '单价')
+const amountLabel = computed(() => AMOUNT_LABELS[order.value?.order_type] || '金额')
+// 合计用展示值（各行物料单位可能不同，这个数仅供参考）
+const totalQty = computed(() => items.value.reduce((s, i) => s + (Number(i.quantity_display ?? i.quantity) || 0), 0))
 const totalAmount = computed(() => items.value.reduce((s, i) => s + amountOf(i), 0))
 
 const supplierMap = computed(() => {
@@ -104,8 +133,23 @@ const supplierMap = computed(() => {
   return m
 })
 
+const customerMap = computed(() => {
+  const m = new Map()
+  customers.value.forEach((c) => m.set(c.id, c.name))
+  return m
+})
+
 function supplierName(id) {
   return id ? supplierMap.value.get(id) || `#${id}` : '—'
+}
+
+function customerName(id) {
+  return id ? customerMap.value.get(id) || `#${id}` : '—'
+}
+
+// 合作方判定：入库/退货 = 供应商，出库 = 客户（报废在模板里特判）
+function isSupplierType(t) {
+  return t === 1 || t === 3
 }
 
 function priceOf(row) {
@@ -115,11 +159,17 @@ function priceOf(row) {
 // 后端给了 total_amount 就用它，否则按 数量 × 单价 兜底
 function amountOf(row) {
   if (row.total_amount != null) return Number(row.total_amount)
-  return priceOf(row) != null ? Number(priceOf(row)) * (row.quantity || 0) : 0
+  // 后端 total_amount = 显示单位数量 × 单价，兜底也要同口径
+  return priceOf(row) != null ? Number(priceOf(row)) * (Number(row.quantity_display ?? row.quantity) || 0) : 0
 }
 
 function fmtMoney(n) {
   return Number(n || 0).toFixed(2)
+}
+
+// 展示数量：去掉浮点尾巴（2.5000000001 → 2.5，40 → 40）
+function fmtQty(n) {
+  return Number(Number(n || 0).toFixed(3))
 }
 
 function goList() {
@@ -169,6 +219,9 @@ onMounted(() => {
   listSupplier().then((list) => {
     suppliers.value = list
   })
+  listCustomer().then((list) => {
+    customers.value = list
+  })
 })
 </script>
 
@@ -200,6 +253,12 @@ onMounted(() => {
 .mono {
   font-family: Consolas, 'Courier New', monospace;
 }
+/* 数量单元格下方的次要说明："录入 5 斤" */
+.cell-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #8a94a6;
+}
 .mt-card {
   margin-top: 14px;
 }
@@ -223,5 +282,16 @@ onMounted(() => {
   color: #f56c6c;
   font-size: 18px;
   font-weight: 700;
+}
+/* 合作方：角色 tag + 名称 */
+.role-tag {
+  vertical-align: middle;
+}
+.partner-name {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.text-muted {
+  color: #c0c4cc;
 }
 </style>

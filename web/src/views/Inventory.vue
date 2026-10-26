@@ -34,7 +34,8 @@
         <el-button type="primary" :icon="Search" @click="handleSearch">查询</el-button>
         <el-button :icon="RefreshLeft" @click="handleReset">重置</el-button>
         <div class="spacer"></div>
-        <el-button type="primary" :icon="Plus" @click="openCreate">新增物料</el-button>
+        <!-- 新增/编辑走独立整页 /inventory/edit/:id?，不再是弹窗 -->
+        <el-button type="primary" :icon="Plus" @click="$router.push('/inventory/edit')">新增物料</el-button>
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </div>
 
@@ -78,12 +79,32 @@
         </el-table-column>
         <el-table-column prop="stock" label="当前库存" width="110" align="center" sortable="custom">
           <template #default="{ row }">
-            <span :class="isLowStock(row) ? 'stock-low' : 'stock-normal'">{{ row.stock }}</span>
+            <span :class="isLowStock(row) ? 'stock-low' : 'stock-normal'">{{ row.stock_display ?? row.stock }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="unit" label="单位" width="70" align="center" />
+        <el-table-column label="单位" width="90" align="center">
+          <template #default="{ row }">
+            <!-- 显示单位和存储单位不一致时，tooltip 提示底层按什么记 -->
+            <el-tooltip
+              v-if="row.unit_base && row.unit_base !== row.unit"
+              :content="`库存按「${row.unit_base}」存储`"
+              placement="top"
+            >
+              <span class="unit-with-base">{{ row.unit }}</span>
+            </el-tooltip>
+            <span v-else>{{ row.unit }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="成本均价" width="110" align="center">
+          <template #default="{ row }">
+            <span v-if="row.avg_cost" class="cost-value">¥ {{ fmtMoney(row.avg_cost) }}</span>
+            <span v-else class="text-muted">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="预警值" width="90" align="center">
-          <template #default="{ row }">{{ row.warning ?? '—' }}</template>
+          <template #default="{ row }">
+            {{ row.warning != null ? (row.warning_display ?? row.warning) : '—' }}
+          </template>
         </el-table-column>
         <el-table-column label="物料状态" width="90" align="center">
           <template #default="{ row }">
@@ -101,7 +122,7 @@
         </el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link :icon="Edit" @click="openEdit(row)">编辑</el-button>
+            <el-button type="primary" link :icon="Edit" @click="$router.push(`/inventory/edit/${row.id}`)">编辑</el-button>
             <el-button type="success" link :icon="Tickets" @click="quickOrder(row, 1)">入库</el-button>
             <el-button type="warning" link :icon="Tickets" @click="quickOrder(row, 2)">出库</el-button>
           </template>
@@ -121,108 +142,15 @@
       </div>
     </div>
 
-    <!-- 新增 / 编辑物料弹窗 -->
-    <el-dialog
-      v-model="dialog.visible"
-      :title="dialog.mode === 'create' ? '新增物料' : '编辑物料'"
-      width="600px"
-      destroy-on-close
-    >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
-        <el-row :gutter="12">
-          <el-col :span="12">
-            <el-form-item label="物料名称" prop="name">
-              <el-input v-model="form.name" placeholder="如：减速机" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="型号" prop="type">
-              <el-input v-model="form.type" placeholder="如：XK-100" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="助记码" prop="mnemonic_code">
-              <el-input
-                v-model="form.mnemonic_code"
-                placeholder="留空则自动生成拼音首字母"
-                clearable
-                :disabled="dialog.mode === 'create'"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="所属分类" prop="category_id">
-              <el-select v-model="form.category_id" placeholder="请选择末级分类" style="width: 100%">
-                <el-option
-                  v-for="c in categoryOptions"
-                  :key="c.id"
-                  :label="c.name"
-                  :value="c.id"
-                />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="供应商" prop="supplier_id">
-              <el-select v-model="form.supplier_id" placeholder="请选择供应商" style="width: 100%">
-                <el-option v-for="s in supplierList" :key="s.id" :label="s.name" :value="s.id" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="单位" prop="unit">
-              <el-input v-model="form.unit" placeholder="如：台 / 个 / kg" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="初始库存" prop="stock">
-              <el-input-number v-model="form.stock" :min="0" :precision="0" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="预警数量" prop="warning">
-              <el-input-number
-                v-model="form.warning"
-                :min="0"
-                :precision="0"
-                placeholder="不填则不预警"
-                style="width: 100%"
-              />
-              <div class="form-hint">库存 ≤ 预警值 时高亮提醒</div>
-            </el-form-item>
-          </el-col>
-          <el-col v-if="dialog.mode === 'edit'" :span="12">
-            <el-form-item label="物料状态">
-              <el-switch
-                v-model="form.status"
-                :active-value="1"
-                :inactive-value="0"
-                active-text="启用"
-                inactive-text="禁用"
-              />
-              <div class="form-hint">禁用后不出现在单据的物料搜索中</div>
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialog.visible = false">取 消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保 存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Plus, Refresh, RefreshLeft, Search, Edit, Tickets, OfficeBuilding, FolderOpened } from '@element-plus/icons-vue'
 import {
   listInventory,
-  getInventory,
-  createInventory,
-  updateInventory,
   listSupplier,
   listCategory
 } from '@/api'
@@ -235,12 +163,11 @@ const SORT_FIELDS = ['id', 'code', 'name', 'type', 'stock', 'warning']
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
-const saving = ref(false)
 const list = ref([])        // 当前页数据（后端已分页、已过滤）
 const total = ref(0)        // 符合条件的总条数（后端返回）
 const supplierList = ref([])
 const categoryList = ref([])
-const formRef = ref(null)
+
 const tableRef = ref(null)
 
 // 筛选、排序、分页都从 URL 还原：刷新、后退、分享链接都能回到同一个列表视图
@@ -272,42 +199,12 @@ const sortState = reactive({
   prop: SORT_FIELDS.includes(route.query.sort_by) ? route.query.sort_by : '',
   order: ['asc', 'desc'].includes(route.query.order) ? route.query.order : ''
 })
-const dialog = reactive({ visible: false, mode: 'create' })
-
-const form = reactive({
-  id: null,
-  name: '',
-  type: '',
-  mnemonic_code: '',
-  category_id: null,
-  supplier_id: null,
-  unit: '个',
-  stock: 0,
-  warning: null,
-  status: 1
-})
-
-const rules = {
-  name: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
-  category_id: [{ required: true, message: '请选择末级分类', trigger: 'change' }],
-  supplier_id: [{ required: true, message: '请选择供应商', trigger: 'change' }],
-  unit: [{ required: true, message: '请输入单位', trigger: 'blur' }]
-}
-
-/* 只允许选择末级分类 */
-const categoryOptions = computed(() => {
-  const hasChild = new Set(categoryList.value.filter((c) => c.parent_id !== 0).map((c) => c.parent_id))
-  return categoryList.value
-    .filter((c) => !hasChild.has(c.id))
-    .map((c) => ({
-      id: c.id,
-      name: `${c.name}${c.parent_id ? '' : ''}`,
-      full: c
-    }))
-})
-
 function isLowStock(row) {
   return row.warning != null && row.stock != null && row.stock <= row.warning && row.warning > 0
+}
+
+function fmtMoney(n) {
+  return Number(n || 0).toFixed(2)
 }
 
 // 当前是否在按供应商筛选；用 computed 让 chip / 标题 / 列表 自动响应
@@ -421,81 +318,6 @@ function handleSortChange({ prop, order }) {
   load()
 }
 
-function resetForm() {
-  form.id = null
-  form.name = ''
-  form.type = ''
-  form.mnemonic_code = ''
-  form.category_id = null
-  form.supplier_id = null
-  form.unit = '个'
-  form.stock = 0
-  form.warning = null
-  form.status = 1
-}
-
-function openCreate() {
-  dialog.mode = 'create'
-  resetForm()
-  dialog.visible = true
-}
-
-async function openEdit(row) {
-  dialog.mode = 'edit'
-  resetForm()
-  const detail = await getInventory(row.id)
-  form.id = detail.id
-  form.name = detail.name
-  form.type = detail.type || ''
-  form.mnemonic_code = detail.mnemonic_code || ''
-  form.category_id = detail.category_id ?? null
-  form.supplier_id = detail.supplier_id ?? null
-  form.unit = detail.unit || '个'
-  form.stock = detail.stock ?? 0
-  form.warning = detail.warning ?? null
-  form.status = detail.status ?? 1
-  dialog.visible = true
-}
-
-async function submit() {
-  try {
-    await formRef.value.validate()
-  } catch (e) {
-    return
-  }
-  if (!categoryOptions.value.some((o) => o.id === form.category_id)) {
-    ElMessage.warning('请选择末级分类（无子分类的类别）')
-    return
-  }
-  saving.value = true
-  try {
-    const payload = {
-      name: form.name,
-      type: form.type || null,
-      mnemonic_code: form.mnemonic_code || null,
-      category_id: form.category_id,
-      supplier_id: form.supplier_id,
-      unit: form.unit,
-      stock: form.stock,
-      warning: form.warning
-    }
-    if (dialog.mode === 'create') {
-      await createInventory(payload)
-      ElMessage.success('新增成功')
-    } else {
-      // 编辑模式额外带 status；创建不用传，后端 schema 里 server_default=1 兜底
-      await updateInventory(form.id, { ...payload, status: form.status })
-      ElMessage.success('保存成功')
-    }
-    dialog.visible = false
-    load()
-  } catch (e) {
-    /* 拦截器已提示 */
-  } finally {
-    saving.value = false
-  }
-}
-
 function quickOrder(row, orderType) {
   router.push({ path: `/orders/edit`, query: { type: orderType, inventory_id: row.id } })
 }
@@ -524,6 +346,10 @@ onMounted(async () => {
 .text-muted {
   color: #c0c4cc;
 }
+.cost-value {
+  font-weight: 600;
+  color: #d98800;
+}
 .stock-normal {
   font-weight: 600;
   color: #2f9e44;
@@ -532,11 +358,10 @@ onMounted(async () => {
   font-weight: 700;
   color: #f56c6c;
 }
-.form-hint {
-  font-size: 12px;
-  color: #a0a8b8;
-  line-height: 1.4;
-  margin-top: 2px;
+/* 显示单位 ≠ 存储单位时，加虚线下划线提示可看 tooltip */
+.unit-with-base {
+  border-bottom: 1px dashed #c0c4cc;
+  cursor: help;
 }
 
 /* 跨页面来源的筛选 chip：来自供应商页跳转等，让用户看清楚「现在只看哪家的物料」 */
